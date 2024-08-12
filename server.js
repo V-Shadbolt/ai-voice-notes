@@ -15,6 +15,8 @@ const FOLDER_ID = '1K_6FLNo49uQZgHw_aWLhNBTHJ3QE5vxf'
 const TOKEN_PATH = path.join(__dirname, "token.json")
 const CREDENTIALS_PATH = path.join(__dirname, "credentials.json")
 const START_PAGE_TOKEN_PATH = path.join(__dirname, "startpagetoken.json")
+const TEMP_PATH = path.join(__dirname,"/tmp/audio.")
+const supportedMimes = ["mp3", "m4a", "wav", "mp4", "mpeg", "mpga", "webm"]
 let oAuth2Client = null
 
 /**
@@ -100,7 +102,7 @@ async function loadStartPageTokenIfExist() {
 }
 
 /**
- * Serializes startPageToken to a file.
+ * Serializes startPageToken and token date to a file.
  *
  * @param {Number} token
  * @param {string} date
@@ -117,15 +119,15 @@ async function saveStartPageToken(token, date) {
 
 /**
  * Load or request or startPageToken to track changes.
- *
+ * 
+ * @param {drive_v3.Drive} drive
  * @return {Promise<Array>}
  */
-async function startPageToken() {
+async function startPageToken(drive) {
     let token = await loadStartPageTokenIfExist()
     if (token) {
         return [token[0], token[1]]
     }
-    const drive = await getDrive()
     const response_sp = await drive.changes.getStartPageToken()
     token = response_sp?.data?.startPageToken
     date = new Date().toISOString()
@@ -137,7 +139,7 @@ async function startPageToken() {
 }
 
 /**
- * Load or request or startPageToken to track changes.
+ * Authorize Google Drive API.
  *
  * @return {Promise<drive_v3.Drive>}
  */
@@ -151,6 +153,43 @@ async function getDrive() {
     return drive
 }
 
+/**
+ * Download new file to tmp.
+ * 
+ * @param {drive_v3.Drive} drive
+ * @param {drive_v3.Schema$File} file
+ * @return {Promise<void>}
+ */
+async function getFile(drive, file) {
+    const download = await drive.files.get({
+        fileId: file?.id,
+        alt: 'media',
+    })
+    const fileBlob = download?.data
+    fileBlob.lastModifiedDate = new Date();
+    fileBlob.name = file?.name;
+    const buffer = Buffer.from( await fileBlob.arrayBuffer() )
+    await fs.writeFileSync(TEMP_PATH+file?.fileExtension, buffer)
+    console.log(`Downloaded ${file?.name}`)
+}
+
+/**
+ * Delete tmp file.
+ * 
+ * @param {drive_v3.Schema$File} file
+ * @return {Promise<void>}
+ */
+async function deleteFile(file) {
+    fs.unlink(TEMP_PATH+file?.fileExtension,function(err){
+        if(err) return console.log(err);
+        console.log(`${file?.name} deleted successfully`);
+   })
+}
+
+
+/**
+ * Authorization endpoint to instantiate OAuth2
+ */
 app.get('/auth', async (req, res) => {
     const url = await authorize()
     if (typeof url[1] === 'string' || url instanceof String) {
@@ -160,20 +199,28 @@ app.get('/auth', async (req, res) => {
     }
 });
 
-// Handle the callback from the authentication flow
+/**
+ * Callback endpoint from OAuth2
+ */
 app.get('/oauth2callback', async (req, res) => {
     const code = req.query.code;
     try {
+        // Set OAuth2 Credentials
         const {tokens} = await oAuth2Client.getToken(code);
         await oAuth2Client.setCredentials(tokens);
         if (oAuth2Client.credentials){
             await saveCredentials(oAuth2Client)
         }
-        console.log('Authentication successful! Registering webhook')
+        console.log('Authentication successful!')
 
-        const pageToken = await startPageToken()
+        // Register Webhook to watch for changes
         /*
+        const drive = await getDrive()
+        const pageToken = await startPageToken(drive)
+        const lastCheck = pageToken[1]
+        const startToken = pageToken[0]
         const channelId = uuid.v4();
+
         const requestBody = {
             kind: "api#channel",
             type: "webhook",
@@ -181,8 +228,8 @@ app.get('/oauth2callback', async (req, res) => {
             id: channelId,
           };
         const response_watch = await drive.files.watch({
-            q: `${FOLDER_ID} in parents`,
-            pageToken: pageToken[0],
+            q: `"${FOLDER_ID}" in parents and mimeType != "application/vnd.google-apps.folder" and trashed = false`,
+            pageToken: startToken,
             supportsAllDrives: SUPPORT_ALL_DRIVES,
             supportsTeamDrives: SUPPORT_TEAM_DRIVES,
             includeItemsFromAllDrives: INCLUDE_ITEMS_FROM_ALL_DRIVES,
@@ -190,6 +237,7 @@ app.get('/oauth2callback', async (req, res) => {
         })
         */
 
+        // Placeholder for webhook callback endpoint
         res.redirect('/changes');
     } catch (error) {
         console.error('Error authenticating:', error);
@@ -197,59 +245,72 @@ app.get('/oauth2callback', async (req, res) => {
     }
 });
 
-app.get('/files', async (req, res) => {
-    try {
-        const drive = await getDrive()
-        const response = await drive.files.list({
-            pageSize: 10, // Set the desired number of files to retrieve
-            fields: 'files(name, id)', // Specify the fields to include in the response
-        });
-        const files = response.data.files;
-        res.json(files);
-        } catch (err) {
-        console.error('Error listing files:', err);
-        res.status(500).json({ error: 'Failed to list files' });
-        }
-  });
 
-  app.get('/changes', async (req, res) => {
+/**
+ * Webhook callback endpoint for any file changes in My Drive
+ */
+app.get('/changes', async (req, res) => {
     try {
         const drive = await getDrive()
-        const pageToken = await startPageToken()
-        const lastCheck = pageToken[1];
-        console.log(pageToken)
+        const pageToken = await startPageToken(drive)
+        const lastCheck = pageToken[1]
+        const startToken = pageToken[0]
         
         const response_changes = await drive.files.list({
-            q: `'${FOLDER_ID}' in parents`,// and modifiedTime > '${lastCheck}'`,
-            //pageToken: pageToken[0],
-            //supportsAllDrives: SUPPORT_ALL_DRIVES,
-            //supportsTeamDrives: SUPPORT_TEAM_DRIVES,
-            //includeItemsFromAllDrives: INCLUDE_ITEMS_FROM_ALL_DRIVES,
+            q: `"${FOLDER_ID}" in parents and mimeType != "application/vnd.google-apps.folder" and createdTime > "${lastCheck}" and trashed = false`,
+            orderBy: "createdTime desc",
+            fields: "*",
             pageSize: 500,
         })
-        console.log(response_changes)
-        if (response_changes?.data?.nextPageToken && response_changes?.data?.files?.at(-1)) {
+        //console.log(response_changes)
+        if (response_changes?.data?.files?.at(-1)) {
+            res.write(JSON.stringify(response_changes?.data?.files))
             const lastItem = await drive.files.get({
-                fileId: response.data.files.at(-1)?.id || undefined,
+                fileId: response_changes.data.files.at(-1)?.id || undefined,
                 fields: "createdTime",
             });
+            //console.log(lastItem)
             const date = lastItem?.data?.createdTime;
             if (date) {
                 await saveStartPageToken(response_changes?.data?.newStartPageToken, date)
+                console.log("Saved new check date from files")
             }
-            
+            for (const file of response_changes?.data?.files) {
+                if (supportedMimes.includes(file?.fileExtension) && file?.size < 200000000) {
+                    const readableFileSize = file?.size / 1000000;
+                    // implement try catch logic
+                    // protect against expired refresh token
+                    console.log(`${file?.name} size: ${readableFileSize}`)
+                    await getFile(drive, file)
+
+                    // transcribe with whisper
+                    // upload to notion
+
+                    await deleteFile(file)
+                } else {
+                    res.write(`${file?.name} is too large. Files must be under 200mb and one of the following file types: ${supportedMimes.join(", ")}.`)
+                    throw new Error(
+                        `${file?.name} is too large. Files must be under 200mb and one of the following file types: ${supportedMimes.join(", ")}.`
+                    )
+                }
+            }
         } else {
             await saveStartPageToken(response_changes?.data?.newStartPageToken, new Date().toISOString())
-            
+            res.write("Saved new check date")
         }
-        res.send(JSON.stringify(response_changes?.data))
-        //res.send(JSON.stringify(response_changes?.data?.changes))
+        
+        res.end()
     } catch (error) {
-        console.log(error)
+        console.log('Error parsing files:', error);
+        res.status(500).json({ error: 'Failed to parse files' });
     }
 
-  })
+})
 
+
+/**
+ * Start server
+ */
 app.listen(PORT, (error) =>{
     if(!error)
         console.log("Server is listening on port "+ PORT)

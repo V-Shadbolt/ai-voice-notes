@@ -277,16 +277,20 @@ app.get('/changes', async (req, res) => {
             }
             for (const file of response_changes?.data?.files) {
                 if (supportedMimes.includes(file?.fileExtension) && file?.size < 200000000) {
-                    const readableFileSize = file?.size / 1000000;
-                    // implement try catch logic
-                    // protect against expired refresh token
-                    console.log(`${file?.name} size: ${readableFileSize}`)
-                    await getFile(drive, file)
+                    try {
+                        const readableFileSize = file?.size / 1000000;
+                        // protect against expired refresh token
+                        console.log(`${file?.name} size: ${readableFileSize}`)
+                        await getFile(drive, file)
 
-                    // transcribe with whisper
-                    // upload to notion
+                        // transcribe with whisper
+                        // upload to notion
 
-                    await deleteFile(file)
+                        await deleteFile(file)
+
+                    } catch (error) {
+                        console.log(`Failed to parse ${file?.name}: ${error}`)
+                    }
                 } else {
                     res.write(`${file?.name} is too large. Files must be under 200mb and one of the following file types: ${supportedMimes.join(", ")}.`)
                     throw new Error(

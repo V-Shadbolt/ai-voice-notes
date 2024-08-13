@@ -1,0 +1,201 @@
+ Hey there, it's
+ Thomas Frank, and I
+ am going to record
+ a couple of minutes
+ of
+ test audio that you
+ can use as a test
+ file for setting up
+ my Notion Voice
+ Notes workflow. And
+ since I'm going to
+ speak for ideally a
+ couple of minutes,
+ I
+ thought I would
+ take this
+ opportunity to tell
+ you why if you want
+ to learn how to
+ code, I think the
+ best example
+ subject to build a
+ project around is
+ actually
+ Pokemon. Well
+ actually it's not
+ the best example
+ project because the
+ true best
+ example is whatever
+ you think is
+ interesting to you.
+ If you are
+ interested
+ in what you're
+ learning, then you're
+ going to be more
+ motivated to push
+ through the
+ difficulties, the
+ bugs that you run
+ into, and the
+ overall complexity
+ of learning how to
+ code. But if we
+ were to try to
+ identify a
+ universally best
+ example subject for
+ everyone to build
+ projects around, if
+ I were a teacher
+ and
+ I got to teach a
+ coding class to
+ every kid in the
+ world, I would pick
+ Pokemon as
+ my example, and I
+ have three main
+ reasons why. So the
+ first reason is it's
+ universal recognizability.
+ Almost everyone
+ knows about Pokemon,
+ especially if
+ you're around my
+ age or younger, but
+ especially if you
+ are my age. When I
+ was
+ a kid, everyone was
+ playing Pokemon,
+ everyone had the
+ cards, everyone was
+ playing the games.
+ It was a global
+ phenomenon, and it
+ has staying power.
+ It
+ is still extremely
+ popular today. So
+ it's a property
+ that spans multiple
+ generations. So it
+ has that recognizability
+ aspect going for it.
+ And the reason why
+ it's so good for
+ learning how to
+ program in general,
+ or specifically, is
+ I can't
+ think of many other
+ things that lend
+ themselves so well
+ to teaching data
+ structures. And
+ when you think
+ about it,
+ programming really
+ is all about
+ managing
+ and manipulating
+ data structures,
+ typically lists or
+ objects, which are
+ just
+ kind of boxes with
+ key value pairs of
+ information that
+ hold data strings
+ of
+ text numbers, links
+ to images data.
+ Pokemon is
+ wonderful for
+ teaching you to
+ understand
+ different
+ structures for
+ holding data. Every
+ Pokemon has a
+ number. Every
+ Pokemon has one or
+ more types. They
+ have default move
+ lists. They
+ have moves they can
+ learn moves. They
+ can't learn
+ different items
+ that have
+ different effects
+ for them. So if you're
+ learning to, for
+ example, sort an
+ array
+ alphabetically or
+ by number, Pokemon
+ gives you all of
+ that data. There's
+ just
+ so many data
+ structures inherent
+ in the game, in the
+ property, in the
+ trading
+ card game that you
+ can build all kinds
+ of projects around
+ it. And in fact, a
+ lot
+ of programmers have
+ cut their teeth on
+ building pokedexes.
+ The third and final
+ reason is there is
+ a free API called a
+ poke API. You do
+ not have to
+ register for
+ it. It has an
+ extremely generous
+ rate limiting rule.
+ So you can
+ basically pull
+ as much information
+ as you want from it.
+ And that makes it
+ really good for
+ learning how to
+ work with APIs. And
+ for example, if you
+ wanted to build
+ your
+ own pokedex, you
+ don't have to go
+ manually get all
+ the data for it.
+ You can
+ use poke API to get
+ all of the names,
+ the move sets, the
+ pictures, the
+ sprites, they have
+ it all. So it is
+ basically set up to
+ give you all this
+ interesting data
+ that you probably
+ are at least
+ somewhat familiar
+ with to build
+ a great example
+ project.
+ [BLANK_AUDIO]
+ [BLANK_AUDIO]
+ [BLANK_AUDIO]
+ [BLANK_AUDIO]
+ [BLANK_AUDIO]

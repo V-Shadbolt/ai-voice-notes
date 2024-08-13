@@ -3,6 +3,8 @@ const fs = require('fs')
 const path = require("path")
 const { google, drive_v3 } = require('googleapis')
 const uuid = require("uuid")
+const { nodewhisper } = require('nodejs-whisper')
+const { Client } = require("@notionhq/client")
 
 // Configuration
 const app = express()
@@ -176,7 +178,7 @@ async function getFile(drive, file) {
 /**
  * Delete tmp file.
  * 
- * @param {drive_v3.Schema$File} file
+ * @param {drive_v3.Schema$File } file
  * @return {Promise<void>}
  */
 async function deleteFile(file) {
@@ -250,6 +252,7 @@ app.get('/oauth2callback', async (req, res) => {
  * Webhook callback endpoint for any file changes in My Drive
  */
 app.get('/changes', async (req, res) => {
+    res.send('Hook recieved')
     try {
         const drive = await getDrive()
         const pageToken = await startPageToken(drive)
@@ -264,7 +267,7 @@ app.get('/changes', async (req, res) => {
         })
         //console.log(response_changes)
         if (response_changes?.data?.files?.at(-1)) {
-            res.write(JSON.stringify(response_changes?.data?.files))
+            //res.write(JSON.stringify(response_changes?.data?.files))
             const lastItem = await drive.files.get({
                 fileId: response_changes.data.files.at(-1)?.id || undefined,
                 fields: "createdTime",
@@ -279,31 +282,63 @@ app.get('/changes', async (req, res) => {
                 if (supportedMimes.includes(file?.fileExtension) && file?.size < 200000000) {
                     try {
                         const readableFileSize = file?.size / 1000000;
-                        // protect against expired refresh token
-                        console.log(`${file?.name} size: ${readableFileSize}`)
+                        // Protect against expired refresh token
+                        console.log(`${file?.name} size: ${readableFileSize}mb`)
                         await getFile(drive, file)
 
-                        // transcribe with whisper
-                        // upload to notion
+                        // Transcribe with whisper
+                        await nodewhisper(TEMP_PATH+file?.fileExtension, {
+                            modelName: 'small', //Downloaded models name
+                            autoDownloadModelName: 'small', // (optional) autodownload a model if model is not present
+                            verbose: false,
+                            removeWavFileAfterTranscription: true,
+                            withCuda: false, // (optional) use cuda for faster processing
+                            whisperOptions: {
+                                outputInText: true, // get output result in txt file
+                                outputInVtt: false, // get output result in vtt file
+                                outputInSrt: false, // get output result in srt file
+                                outputInCsv: false, // get output result in csv file
+                                translateToEnglish: false, //translate from source language to english
+                                wordTimestamps: false, // Word-level timestamps
+                                timestamps_length: 20, // amount of dialogue per timestamp pair
+                                splitOnWord: true, //split on word rather than on token
+                            },
+                        })
 
+                        const transcriptionFile = {
+                            name: "audio.wav.txt",
+                            fileExtension: "wav.txt",
+                        }
+
+                        // Summarize with LLM
+
+                        // Upload to notion
+                        const notion = new Client({
+                            auth: 'secret_WYh2TsICtuGWu3NjohHhHDLBHknLsBhdiRBwPioMRkx',
+                        })
+                        const listUsersResponse = await notion.users.list({})
+                        console.log(listUsersResponse)
+
+                        // Cleanup
+                        await deleteFile(transcriptionFile)
                         await deleteFile(file)
 
                     } catch (error) {
-                        console.log(`Failed to parse ${file?.name}: ${error}`)
+                        console.log(`Failed to parse "${file?.name}": ${error}`)
                     }
                 } else {
-                    res.write(`${file?.name} is too large. Files must be under 200mb and one of the following file types: ${supportedMimes.join(", ")}.`)
+                    //res.write(`"${file?.name}" is too large. Files must be under 200mb and one of the following file types: ${supportedMimes.join(", ")}.`)
                     throw new Error(
-                        `${file?.name} is too large. Files must be under 200mb and one of the following file types: ${supportedMimes.join(", ")}.`
+                        `"${file?.name}" is too large. Files must be under 200mb and one of the following file types: ${supportedMimes.join(", ")}.`
                     )
                 }
             }
         } else {
             await saveStartPageToken(response_changes?.data?.newStartPageToken, new Date().toISOString())
-            res.write("Saved new check date")
+            //res.write("Saved new check date")
         }
         
-        res.end()
+        //res.end()
     } catch (error) {
         console.log('Error parsing files:', error);
         res.status(500).json({ error: 'Failed to parse files' });

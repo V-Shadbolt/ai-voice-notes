@@ -133,3 +133,6 @@ dist
 token.json
 credentials.json
 startpagetoken.json
+
+# models
+*.gguf

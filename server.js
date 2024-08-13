@@ -1,10 +1,13 @@
-const express = require('express')
-const fs = require('fs')
-const path = require("path")
-const { google, drive_v3 } = require('googleapis')
-const uuid = require("uuid")
-const { nodewhisper } = require('nodejs-whisper')
-const { Client } = require("@notionhq/client")
+import express from 'express'
+import fs from 'fs'
+import { fileURLToPath } from "url";
+import path from 'path'
+import { google, drive_v3 } from 'googleapis'
+import { v4 as uuid } from 'uuid'
+import { nodewhisper } from 'nodejs-whisper'
+import { ChatPromptTemplate } from '@langchain/core/prompts'
+import { LlamaCpp } from '@langchain/community/llms/llama_cpp'
+import { Client } from '@notionhq/client'
 
 // Configuration
 const app = express()
@@ -14,10 +17,12 @@ const SUPPORT_ALL_DRIVES = true
 const SUPPORT_TEAM_DRIVES = true
 const INCLUDE_ITEMS_FROM_ALL_DRIVES = true;
 const FOLDER_ID = '1K_6FLNo49uQZgHw_aWLhNBTHJ3QE5vxf'
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TOKEN_PATH = path.join(__dirname, "token.json")
 const CREDENTIALS_PATH = path.join(__dirname, "credentials.json")
 const START_PAGE_TOKEN_PATH = path.join(__dirname, "startpagetoken.json")
-const TEMP_PATH = path.join(__dirname,"/tmp/audio.")
+const TEMP_PATH = path.join(__dirname,"tmp","audio.")
+const MODEL_PATH = path.join(__dirname,"models","mistral-7b-instruct-v0.1.Q5_K_M.gguf")
 const supportedMimes = ["mp3", "m4a", "wav", "mp4", "mpeg", "mpga", "webm"]
 let oAuth2Client = null
 
@@ -311,6 +316,17 @@ app.get('/changes', async (req, res) => {
                         }
 
                         // Summarize with LLM
+                        const model = await new LlamaCpp({ modelPath: MODEL_PATH });
+                        const prompt =
+                            ChatPromptTemplate.fromTemplate(`Answer the following question if you don't know the answer say so:
+
+                            Question: {input}`);
+
+                        const chain = prompt.pipe(model);
+                        let result = await chain.invoke({
+                            input: "Should I use npm to start a node.js application",
+                          });
+                        console.log(result);
 
                         // Upload to notion
                         const notion = new Client({

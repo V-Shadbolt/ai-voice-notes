@@ -19,12 +19,14 @@ const SUPPORT_ALL_DRIVES = true
 const SUPPORT_TEAM_DRIVES = true
 const INCLUDE_ITEMS_FROM_ALL_DRIVES = true;
 const FOLDER_ID = '1K_6FLNo49uQZgHw_aWLhNBTHJ3QE5vxf'
+const DATABASE_ID = '9fcf9c9d242f40389379839880db65e3'
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TOKEN_PATH = path.join(__dirname, "token.json")
 const CREDENTIALS_PATH = path.join(__dirname, "credentials.json")
 const START_PAGE_TOKEN_PATH = path.join(__dirname, "startpagetoken.json")
 const TEMP_PATH = path.join(__dirname,"tmp","audio.")
 const MODEL_PATH = path.join(__dirname,"models","mistral-7b-instruct-v0.1.Q5_K_M.gguf")
+const TOTAL_TOKENS = 8000;
 const supportedMimes = ["mp3", "m4a", "wav", "mp4", "mpeg", "mpga", "webm"]
 let oAuth2Client = null
 
@@ -329,7 +331,7 @@ app.get('/changes', async (req, res) => {
                         await deleteFile(transcriptionFile)
 
                         // Summarize formatted transcript with LLM
-                        const model = await new LlamaCpp({ modelPath: MODEL_PATH });
+                        const model = await new LlamaCpp({ modelPath: MODEL_PATH, batchSize: TOTAL_TOKENS });
                         const systemPrompt = getPrompt()
                         const chatPrompt = ChatPromptTemplate.fromMessages([
                                 ("system", systemPrompt),
@@ -362,8 +364,10 @@ app.get('/changes', async (req, res) => {
                         const notion = new Client({
                             auth: 'secret_WYh2TsICtuGWu3NjohHhHDLBHknLsBhdiRBwPioMRkx',
                         })
-                        const listUsersResponse = await notion.users.list({})
-                        console.log(listUsersResponse)
+                        const listDatabase = await notion.databases.query({
+                            database_id: DATABASE_ID
+                        })
+                        console.log(listDatabase)
 
                     } catch (error) {
                         console.log(`Failed to parse "${file?.name}": ${error}`)

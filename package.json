@@ -15,6 +15,7 @@
     "@notionhq/client": "^2.2.15",
     "express": "^4.19.2",
     "googleapis": "^140.0.1",
+    "jsonrepair": "^3.8.0",
     "node-llama-cpp": "^2.8.15",
     "nodejs-whisper": "^0.1.18",
     "uuid": "^10.0.0"

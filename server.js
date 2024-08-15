@@ -8,6 +8,8 @@ import { nodewhisper } from 'nodejs-whisper'
 import { ChatPromptTemplate } from '@langchain/core/prompts'
 import { LlamaCpp } from '@langchain/community/llms/llama_cpp'
 import { Client } from '@notionhq/client'
+import { getPrompt, adjustTranscript } from './helpers/prompt.js';
+import { repairJSON } from './helpers/json.js';
 
 // Configuration
 const app = express()
@@ -220,7 +222,7 @@ app.get('/oauth2callback', async (req, res) => {
         }
         console.log('Authentication successful!')
 
-        // Register Webhook to watch for changes
+        // TO_DO Register Webhook to watch for changes
         /*
         const drive = await getDrive()
         const pageToken = await startPageToken(drive)
@@ -286,12 +288,12 @@ app.get('/changes', async (req, res) => {
             for (const file of response_changes?.data?.files) {
                 if (supportedMimes.includes(file?.fileExtension) && file?.size < 200000000) {
                     try {
+                        // download gdrive file
                         const readableFileSize = file?.size / 1000000;
-                        // Protect against expired refresh token
                         console.log(`${file?.name} size: ${readableFileSize}mb`)
                         await getFile(drive, file)
 
-                        // Transcribe with whisper
+                        // Transcribe gdrive file with whisper
                         await nodewhisper(TEMP_PATH+file?.fileExtension, {
                             modelName: 'small', //Downloaded models name
                             autoDownloadModelName: 'small', // (optional) autodownload a model if model is not present
@@ -310,34 +312,58 @@ app.get('/changes', async (req, res) => {
                             },
                         })
 
+                        // remove gdrive file
+                        await deleteFile(file)
+
+                        // create file object for transcript
                         const transcriptionFile = {
                             name: "audio.wav.txt",
                             fileExtension: "wav.txt",
                         }
+                        
+                        // Load and format transcript
+                        const transcript = fs.readFileSync(TEMP_PATH+transcriptionFile.fileExtension, 'utf8');
+                        const adjustedTranscript = adjustTranscript(transcript, new Date().toISOString())
 
-                        // Summarize with LLM
+                        // delete transcription file
+                        await deleteFile(transcriptionFile)
+
+                        // Summarize formatted transcript with LLM
                         const model = await new LlamaCpp({ modelPath: MODEL_PATH });
-                        const prompt =
-                            ChatPromptTemplate.fromTemplate(`Answer the following question if you don't know the answer say so:
+                        const systemPrompt = getPrompt()
+                        const chatPrompt = ChatPromptTemplate.fromMessages([
+                                ("system", systemPrompt),
+                                ("user", "{adjustedTranscript}"),
+                        ])
+                        const chain = chatPrompt.pipe(model);
+                        const chat = await chain.invoke({
+                            adjustedTranscript: adjustedTranscript
+                        });
 
-                            Question: {input}`);
+                        // repair AI response if necessary
+                        const chatResponse = repairJSON(chat)
 
-                        const chain = prompt.pipe(model);
-                        let result = await chain.invoke({
-                            input: "Should I use npm to start a node.js application",
-                          });
-                        console.log(result);
+                        // ensure AI response format
+                        const finalChatResponse = {
+                            title: chatResponse?.title || "",
+                            summary: chatResponse?.summary || "",
+                            main_points: chatResponse?.main_points?.flat() || [],
+                            action_items: chatResponse?.action_items?.flat() || [],
+                            stories: chatResponse?.stories?.flat() || [],
+                            references: chatResponse?.references?.flat() || [],
+                            arguments: chatResponse?.arguments?.flat() || [],
+                            follow_up: chatResponse?.follow_up?.flat() || [],
+                            related_topics: chatResponse?.related_topics?.flat() || [],
+                        };
 
-                        // Upload to notion
+                        console.log(finalChatResponse);
+
+                        // TO-DO Upload chat response to notion
                         const notion = new Client({
                             auth: 'secret_WYh2TsICtuGWu3NjohHhHDLBHknLsBhdiRBwPioMRkx',
                         })
                         const listUsersResponse = await notion.users.list({})
                         console.log(listUsersResponse)
-
-                        // Cleanup
-                        await deleteFile(transcriptionFile)
-                        await deleteFile(file)
 
                     } catch (error) {
                         console.log(`Failed to parse "${file?.name}": ${error}`)

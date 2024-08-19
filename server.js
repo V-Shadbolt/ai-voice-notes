@@ -5,11 +5,12 @@ import path from 'path'
 import { google, drive_v3 } from 'googleapis'
 import { v4 as uuid } from 'uuid'
 import { nodewhisper } from 'nodejs-whisper'
-import { ChatPromptTemplate } from '@langchain/core/prompts'
-import { LlamaCpp } from '@langchain/community/llms/llama_cpp'
+import { getLlama, LlamaChatSession } from "node-llama-cpp";
 import { Client } from '@notionhq/client'
-import { getPrompt, adjustTranscript } from './helpers/prompt.js';
-import { repairJSON } from './helpers/json.js';
+import  { getAudioDurationInSeconds } from 'get-audio-duration'
+import { getPrompt } from './helpers/prompt.js';
+import { getGrammar } from './helpers/grammar.js';
+import { createNotionPage, populateNotionPage } from './helpers/notion.js';
 
 // Configuration
 const app = express()
@@ -25,8 +26,7 @@ const TOKEN_PATH = path.join(__dirname, "token.json")
 const CREDENTIALS_PATH = path.join(__dirname, "credentials.json")
 const START_PAGE_TOKEN_PATH = path.join(__dirname, "startpagetoken.json")
 const TEMP_PATH = path.join(__dirname,"tmp","audio.")
-const MODEL_PATH = path.join(__dirname,"models","mistral-7b-instruct-v0.1.Q5_K_M.gguf")
-const TOTAL_TOKENS = 8000;
+const MODEL_PATH = path.join(__dirname,"models","Meta-Llama-3.1-8B-Instruct.i1-Q4_K_M.gguf")
 const supportedMimes = ["mp3", "m4a", "wav", "mp4", "mpeg", "mpga", "webm"]
 let oAuth2Client = null
 
@@ -249,7 +249,9 @@ app.get('/oauth2callback', async (req, res) => {
         */
 
         // Placeholder for webhook callback endpoint
-        res.redirect('/changes');
+        setTimeout(function() {
+            res.redirect('/changes');
+        }, 5000)
     } catch (error) {
         console.error('Error authenticating:', error);
         res.status(500).send('Authentication failed.');
@@ -263,6 +265,7 @@ app.get('/oauth2callback', async (req, res) => {
 app.get('/changes', async (req, res) => {
     res.send('Hook recieved')
     try {
+        console.log("Checking for new files.")
         const drive = await getDrive()
         const pageToken = await startPageToken(drive)
         const lastCheck = pageToken[1]
@@ -274,120 +277,138 @@ app.get('/changes', async (req, res) => {
             fields: "*",
             pageSize: 500,
         })
-        //console.log(response_changes)
+        
         if (response_changes?.data?.files?.at(-1)) {
-            //res.write(JSON.stringify(response_changes?.data?.files))
+            console.log(`Found ${response_changes?.data?.files.length} new files.`)
+            
             const lastItem = await drive.files.get({
                 fileId: response_changes.data.files.at(-1)?.id || undefined,
                 fields: "createdTime",
             });
-            //console.log(lastItem)
+            
             const date = lastItem?.data?.createdTime;
             if (date) {
-                await saveStartPageToken(response_changes?.data?.newStartPageToken, date)
+                await saveStartPageToken(response_changes?.data?.newStartPageToken || startToken, date)
                 console.log("Saved new check date from files")
             }
             for (const file of response_changes?.data?.files) {
+                console.log(`Working on ${file?.name}`)
                 if (supportedMimes.includes(file?.fileExtension) && file?.size < 200000000) {
                     try {
                         // download gdrive file
                         const readableFileSize = file?.size / 1000000;
-                        console.log(`${file?.name} size: ${readableFileSize}mb`)
+                        const size = `${readableFileSize.toFixed(2)}mb`
                         await getFile(drive, file)
 
-                        // Transcribe gdrive file with whisper
-                        await nodewhisper(TEMP_PATH+file?.fileExtension, {
-                            modelName: 'small', //Downloaded models name
-                            autoDownloadModelName: 'small', // (optional) autodownload a model if model is not present
-                            verbose: false,
-                            removeWavFileAfterTranscription: true,
-                            withCuda: false, // (optional) use cuda for faster processing
-                            whisperOptions: {
-                                outputInText: true, // get output result in txt file
-                                outputInVtt: false, // get output result in vtt file
-                                outputInSrt: false, // get output result in srt file
-                                outputInCsv: false, // get output result in csv file
-                                translateToEnglish: false, //translate from source language to english
-                                wordTimestamps: false, // Word-level timestamps
-                                timestamps_length: 20, // amount of dialogue per timestamp pair
-                                splitOnWord: true, //split on word rather than on token
-                            },
-                        })
-
+                        let duration
+                        try {
+                            console.log("Transcribing...")
+                            await nodewhisper(TEMP_PATH+file?.fileExtension, {
+                                modelName: 'small',
+                                autoDownloadModelName: 'small',
+                                removeWavFileAfterTranscription: false,
+                                whisperOptions: {
+                                    outputInText: true,
+                                },
+                            })
+                            const audioFile = {
+                                name: "audio.wav",
+                                fileExtension: "wav",
+                            }
+                            const seconds = await getAudioDurationInSeconds(TEMP_PATH+audioFile?.fileExtension)
+                            duration = Math.round(seconds)
+                            console.log("Transcribed Successfully")
+                            await deleteFile(audioFile)
+                        } catch (error) {
+                            throw new Error(`Failed to transcribe file: ${error.message}`);
+                        }
+                        
                         // remove gdrive file
                         await deleteFile(file)
 
-                        // create file object for transcript
+                        // Load and format transcript into prompt
                         const transcriptionFile = {
                             name: "audio.wav.txt",
                             fileExtension: "wav.txt",
                         }
-                        
-                        // Load and format transcript
-                        const transcript = fs.readFileSync(TEMP_PATH+transcriptionFile.fileExtension, 'utf8');
-                        const adjustedTranscript = adjustTranscript(transcript, new Date().toISOString())
+                        const rawTranscript = fs.readFileSync(TEMP_PATH+transcriptionFile.fileExtension, 'utf8');
+                        const transcript = rawTranscript.replace(/[\n\r]/g, "").replace(/ *(BLANK_AUDIO)*[\[\]]/g, "").trim()
+                        const prompt = getPrompt(transcript, new Date().toISOString())
 
                         // delete transcription file
                         await deleteFile(transcriptionFile)
 
-                        // Summarize formatted transcript with LLM
-                        const model = await new LlamaCpp({ modelPath: MODEL_PATH, batchSize: TOTAL_TOKENS });
-                        const systemPrompt = getPrompt()
-                        const chatPrompt = ChatPromptTemplate.fromMessages([
-                                ("system", systemPrompt),
-                                ("user", "{adjustedTranscript}"),
-                        ])
-                        const chain = chatPrompt.pipe(model);
-                        const chat = await chain.invoke({
-                            adjustedTranscript: adjustedTranscript
-                        });
+                        // Summarize formatted transcript with LLM prompt
+                        let chatResponse
+                        try {
+                            console.log("Summarizing...")
+                            const llama = await getLlama()
+                            const model = await llama.loadModel({
+                                modelPath: MODEL_PATH
+                            })
+                            const grammar = await getGrammar(llama)
+                            const context = await model.createContext()
+                            const session = new LlamaChatSession({
+                                contextSequence: context.getSequence()
+                            })
+                            const a1 = await session.prompt(prompt, {grammar, maxTokens: context.getAllocatedContextSize()})
+                            
+                            chatResponse = JSON.parse(a1)
+                            console.log("Summarized Successfully")
+                        } catch (error) {
+                            throw new Error(`Failed to summarize transcript: ${error.message}`);
+                        }
 
-                        // repair AI response if necessary
-                        const chatResponse = repairJSON(chat)
+                        chatResponse.url = file?.webViewLink
+                        chatResponse.duration = duration
+                        chatResponse.tag = "AI Transcription"
+                        chatResponse.size = size
 
-                        // ensure AI response format
-                        const finalChatResponse = {
-                            title: chatResponse?.title || "",
-                            summary: chatResponse?.summary || "",
-                            main_points: chatResponse?.main_points?.flat() || [],
-                            action_items: chatResponse?.action_items?.flat() || [],
-                            stories: chatResponse?.stories?.flat() || [],
-                            references: chatResponse?.references?.flat() || [],
-                            arguments: chatResponse?.arguments?.flat() || [],
-                            follow_up: chatResponse?.follow_up?.flat() || [],
-                            related_topics: chatResponse?.related_topics?.flat() || [],
-                        };
-
-                        console.log(finalChatResponse);
-
-                        // TO-DO Upload chat response to notion
-                        const notion = new Client({
-                            auth: 'secret_WYh2TsICtuGWu3NjohHhHDLBHknLsBhdiRBwPioMRkx',
-                        })
-                        const listDatabase = await notion.databases.query({
-                            database_id: DATABASE_ID
-                        })
-                        console.log(listDatabase)
-
+                        // Create Notion page and Upload chat response
+                        try {
+                            console.log("Creating Notion page...")
+                            const notion = new Client({
+                                auth: 'secret_WYh2TsICtuGWu3NjohHhHDLBHknLsBhdiRBwPioMRkx',
+                            })
+                            const page = await createNotionPage(notion, DATABASE_ID, chatResponse)
+                            const transcriptSentences = transcript.replace(/([.?!])\s*(?=[A-Z])/g, "$1|").split("|")
+                            await populateNotionPage(notion, page, chatResponse, transcriptSentences)
+                            console.log("Notion page created successfully")
+                        } catch (error) {
+                            throw new Error(`Failed to create Notion Page: ${error.message}`);
+                        }
+                    
                     } catch (error) {
-                        console.log(`Failed to parse "${file?.name}": ${error}`)
+                        console.log(`Failed to parse "${file?.name}": ${error.message}`)
+                        continue
+                        /*
+                        throw new Error(`Failed to parse "${file?.name}": ${error.message}`);
+                        */
                     }
                 } else {
-                    //res.write(`"${file?.name}" is too large. Files must be under 200mb and one of the following file types: ${supportedMimes.join(", ")}.`)
+                    console.log(`"${file?.name}" is too large. Files must be under 200mb and one of the following file types: ${supportedMimes.join(", ")}.`)
+                    continue
+                    /*
                     throw new Error(
                         `"${file?.name}" is too large. Files must be under 200mb and one of the following file types: ${supportedMimes.join(", ")}.`
                     )
+                    */
                 }
             }
         } else {
-            await saveStartPageToken(response_changes?.data?.newStartPageToken, new Date().toISOString())
-            //res.write("Saved new check date")
+            await saveStartPageToken(response_changes?.data?.newStartPageToken || startToken, new Date().toISOString())
+            console.log("No new files. Saved new check date")
         }
-        
-        //res.end()
     } catch (error) {
-        console.log('Error parsing files:', error);
-        res.status(500).json({ error: 'Failed to parse files' });
+        console.log('General hook error:', error);
+        if (error.message.includes("invalid_grant") || error.message.includes("API key")) {
+            fs.unlink(TOKEN_PATH,function(err){
+                if(err) return console.log(err);
+            })
+            res.redirect('/auth')
+        } else {
+            //res.status(500).json({ error: 'Failed to parse files' });
+        }
     }
 
 })

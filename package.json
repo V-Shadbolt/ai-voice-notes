@@ -10,13 +10,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@langchain/community": "^0.2.27",
-    "@langchain/core": "^0.2.23",
     "@notionhq/client": "^2.2.15",
     "express": "^4.19.2",
+    "get-audio-duration": "^4.0.1",
     "googleapis": "^140.0.1",
-    "jsonrepair": "^3.8.0",
-    "node-llama-cpp": "^2.8.15",
+    "node-llama-cpp": "^3.0.0-beta.44",
     "nodejs-whisper": "^0.1.18",
     "uuid": "^10.0.0"
   }

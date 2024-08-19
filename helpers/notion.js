@@ -173,6 +173,10 @@ export async function populateNotionPage(notion, page, chatResponse, transcript)
         };
 
         data.children.push(paragraphBlock);
+        if (data.children.length > 60) {
+            await notion.blocks.children.append(data);
+            data.children = []
+        }
     }
 
     const infoSectionHeader = {

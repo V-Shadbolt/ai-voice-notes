@@ -141,7 +141,7 @@ async function startPageToken(drive) {
     }
     const response_sp = await drive.changes.getStartPageToken()
     token = response_sp?.data?.startPageToken
-    date = new Date().toISOString()
+    const date = new Date().toISOString()
     if (token) {
       await saveStartPageToken(token, date)
     }

@@ -2,6 +2,7 @@ import express from 'express'
 import fs from 'fs'
 import { fileURLToPath } from "url";
 import path from 'path'
+import dotenv from "dotenv"
 import { google, drive_v3 } from 'googleapis'
 import { v4 as uuid } from 'uuid'
 import { nodewhisper } from 'nodejs-whisper'
@@ -13,22 +14,41 @@ import { getGrammar } from './helpers/grammar.js';
 import { createNotionPage, populateNotionPage } from './helpers/notion.js';
 
 // Configuration
+dotenv.config()
 const app = express()
 const SCOPES = ['https://www.googleapis.com/auth/drive']
+const SUPPORTED_MIMES = ["mp3", "m4a", "wav", "mp4", "mpeg", "mpga", "webm"]
 const PORT = 3000
 const SUPPORT_ALL_DRIVES = true
 const SUPPORT_TEAM_DRIVES = true
 const INCLUDE_ITEMS_FROM_ALL_DRIVES = true;
-const FOLDER_ID = '1K_6FLNo49uQZgHw_aWLhNBTHJ3QE5vxf'
-const DATABASE_ID = '9fcf9c9d242f40389379839880db65e3'
+const FOLDER_ID = process.env.FOLDER_ID
+const DATABASE_ID = process.env.DATABASE_ID
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TOKEN_PATH = path.join(__dirname, "token.json")
-const CREDENTIALS_PATH = path.join(__dirname, "credentials.json")
 const START_PAGE_TOKEN_PATH = path.join(__dirname, "startpagetoken.json")
 const TEMP_PATH = path.join(__dirname,"tmp","audio.")
 const MODEL_PATH = path.join(__dirname,"models","Meta-Llama-3.1-8B-Instruct.i1-Q4_K_M.gguf")
-const supportedMimes = ["mp3", "m4a", "wav", "mp4", "mpeg", "mpga", "webm"]
+
 let oAuth2Client = null
+let llama = null
+let model = null
+let grammar = null
+let context = null
+
+/**
+ * Starts Llama LLM
+ *
+ * @return {Promise<void>}
+ */
+async function startLlama() {
+    llama = await getLlama()
+    model = await llama.loadModel({
+        modelPath: MODEL_PATH
+    })
+    grammar = await getGrammar(llama)
+    context = await model.createContext()
+}
 
 /**
  * Reads previously authorized credentials from the save file.
@@ -52,14 +72,11 @@ async function loadSavedCredentialsIfExist() {
  * @return {Promise<void>}
  */
 async function saveCredentials(client) {
-    const content = await fs.readFileSync(CREDENTIALS_PATH)
-    const keys = JSON.parse(content)
-    const key = keys.installed || keys.web
     
     const payload = JSON.stringify({
       type: 'authorized_user',
-      client_id: key.client_id,
-      client_secret: key.client_secret,
+      client_id: process.env.CLIENT_ID,
+      client_secret: process.env.CLIENT_SECRET,
       refresh_token: client.credentials.refresh_token,
     })
 
@@ -82,11 +99,7 @@ async function authorize() {
         return [oAuth2Client, null]
     }
 
-    const content = await fs.readFileSync(CREDENTIALS_PATH)
-    const keys = JSON.parse(content)
-    const key = keys.installed || keys.web
-
-    oAuth2Client = new google.auth.OAuth2(key.client_id, key.client_secret, key.redirect_uris);
+    oAuth2Client = new google.auth.OAuth2(process.env.CLIENT_ID, process.env.CLIENT_SECRET, process.env.REDIRECT_URIS);
     const authUrl = oAuth2Client.generateAuthUrl({
         access_type: 'offline',
         scope: SCOPES,
@@ -293,7 +306,7 @@ app.get('/changes', async (req, res) => {
             }
             for (const file of response_changes?.data?.files) {
                 console.log(`Working on ${file?.name}`)
-                if (supportedMimes.includes(file?.fileExtension) && file?.size < 200000000) {
+                if (SUPPORTED_MIMES.includes(file?.fileExtension) && file?.size < 200000000) {
                     try {
                         // download gdrive file
                         const readableFileSize = file?.size / 1000000;
@@ -304,8 +317,8 @@ app.get('/changes', async (req, res) => {
                         try {
                             console.log("Transcribing...")
                             await nodewhisper(TEMP_PATH+file?.fileExtension, {
-                                modelName: 'small',
-                                autoDownloadModelName: 'small',
+                                modelName: process.env.WHISPER_MODEL,
+                                autoDownloadModelName: process.env.WHISPER_MODEL,
                                 removeWavFileAfterTranscription: false,
                                 whisperOptions: {
                                     outputInText: true,
@@ -342,12 +355,6 @@ app.get('/changes', async (req, res) => {
                         let chatResponse
                         try {
                             console.log("Summarizing...")
-                            const llama = await getLlama()
-                            const model = await llama.loadModel({
-                                modelPath: MODEL_PATH
-                            })
-                            const grammar = await getGrammar(llama)
-                            const context = await model.createContext()
                             const session = new LlamaChatSession({
                                 contextSequence: context.getSequence()
                             })
@@ -361,14 +368,14 @@ app.get('/changes', async (req, res) => {
 
                         chatResponse.url = file?.webViewLink
                         chatResponse.duration = duration
-                        chatResponse.tag = "AI Transcription"
+                        chatResponse.tag = process.env.PAGE_TAG
                         chatResponse.size = size
 
                         // Create Notion page and Upload chat response
                         try {
                             console.log("Creating Notion page...")
                             const notion = new Client({
-                                auth: 'secret_WYh2TsICtuGWu3NjohHhHDLBHknLsBhdiRBwPioMRkx',
+                                auth: process.env.NOTION_AUTH,
                             })
                             const page = await createNotionPage(notion, DATABASE_ID, chatResponse)
                             const transcriptSentences = transcript.replace(/([.?!])\s*(?=[A-Z])/g, "$1|").split("|")
@@ -381,18 +388,10 @@ app.get('/changes', async (req, res) => {
                     } catch (error) {
                         console.log(`Failed to parse "${file?.name}": ${error.message}`)
                         continue
-                        /*
-                        throw new Error(`Failed to parse "${file?.name}": ${error.message}`);
-                        */
                     }
                 } else {
                     console.log(`"${file?.name}" is too large. Files must be under 200mb and one of the following file types: ${supportedMimes.join(", ")}.`)
                     continue
-                    /*
-                    throw new Error(
-                        `"${file?.name}" is too large. Files must be under 200mb and one of the following file types: ${supportedMimes.join(", ")}.`
-                    )
-                    */
                 }
             }
         } else {
@@ -414,13 +413,15 @@ app.get('/changes', async (req, res) => {
 })
 
 
-/**
- * Start server
- */
-app.listen(PORT, (error) =>{
-    if(!error)
-        console.log("Server is listening on port "+ PORT)
-    else 
-        console.log("Error occurred, server can't start", error);
-    }
-)
+startLlama().then(() => {
+    /**
+     * Start server
+     */
+    app.listen(PORT, (error) =>{
+        if(!error)
+            console.log("Server is listening on port "+ PORT)
+        else 
+            console.log("Error occurred, server can't start", error);
+        }
+    )
+});

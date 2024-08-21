@@ -24,7 +24,7 @@ export function getPrompt(transcript, date) {
 
     prompt.main_points = `Key "main_points" - add an array of the main points. Limit each item to 100 words, and limit the list to 5 items.`;
 
-    prompt.action_items = `Key "action_items" - add an array of action items. Limit each item to 100 words, and limit the list to 3 items. The current date will be provided at the top of the transcript; use it to add ISO 601 dates in parentheses to action items that mention relative days (e.g. "tomorrow").`;
+    prompt.action_items = `Key "action_items" - add an array of action items. Limit each item to 100 words, and limit the list to 5 items. The current date will be provided at the top of the transcript; use it to add ISO 601 dates in parentheses to action items that mention relative days (e.g. "tomorrow").`;
 
     prompt.follow_up = `Key "follow_up" - add an array of follow-up questions. Limit each item to 100 words, and limit the list to 3 items.`;
 
@@ -50,7 +50,7 @@ export function getPrompt(transcript, date) {
         title: "I am a title",
         summary: "I am a summary",
         main_points: ["item 1", "item 2", "item 3", "item 4", "item 5"],
-        action_items: ["item 1", "item 2", "item 3"],
+        action_items: ["item 1", "item 2", "item 3", "item 4", "item 5"],
         follow_up: ["item 1", "item 2", "item 3"],
         stories: ["item 1", "item 2", "item 3"],
         references: ["item 1", "item 2", "item 3"],

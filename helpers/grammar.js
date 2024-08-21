@@ -48,6 +48,12 @@ export async function getGrammar(llama) {
                         },
                         "item_3": {
                             "type": "string"
+                        },
+                        "item_4": {
+                            "type": "string"
+                        },
+                        "item_5": {
+                            "type": "string"
                         }
                     }
                 },

@@ -313,6 +313,7 @@ app.get('/changes', async (req, res) => {
                         const size = `${readableFileSize.toFixed(2)}mb`
                         await getFile(drive, file)
 
+                        // transcribe
                         let duration
                         try {
                             console.log("Transcribing...")

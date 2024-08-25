@@ -14,6 +14,7 @@ services:
       FOLDER_ID: "toBeModified" #Google drive folder ID to check for changes
       NOTION_AUTH: "tobemodified" #Notion client secret
       DATABASE_ID: "tobemodified" #Notion database ID that will host the AI notes.
+      CUDA: "tobemodified" #Strictly "true" or "false" for whether whispher should use available cuda cores. ex. "false" 
       WHISPER_MODEL: "tobemodified" #Size of the whisper model to use: tiny, small, medium, large. ex. "medium"
       PAGE_TAG: "tobemodified" #Notion Page tag to identify AI notes. ex. "AI Transcript"
     volumes:

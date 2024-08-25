@@ -321,6 +321,7 @@ app.get('/changes', async (req, res) => {
                                 modelName: process.env.WHISPER_MODEL,
                                 autoDownloadModelName: process.env.WHISPER_MODEL,
                                 removeWavFileAfterTranscription: false,
+                                withCuda: (process.env.CUDA === "true"),
                                 whisperOptions: {
                                     outputInText: true,
                                 },

@@ -81,7 +81,6 @@ This project is compatible with Docker. You can build a Docker image using the p
 4. Run the application using NodeJS: `node server.js`
 
 **Example Use Cases**
-
 ---------------------
 * Automate audio transcription and summarization for podcasts, interviews, or meetings
 * Create a centralized knowledge base by uploading transcripts and summaries to Notion

@@ -8,13 +8,17 @@ services:
     ports:
       - "3000:3000"
     environment:
+      CORS_ORIGIN: "tobemodified" #CORS origins to accept for the project. Must add comma after each origin except the last in a list > 1. ex. "http://localhost:3000,"
+      CORS_HEADERS: "tobemodified" #CORS headers to accept for the project. Must add comma after each header except the last in a list > 1. ex. "Origin,X-Requested-With,Content-Type,Authorization,Accept"
       CLIENT_ID: "tobemodified" #Google OAUTH2 client ID. Configured in Google Cloud Console.
       CLIENT_SECRET: "tobemodified" #Google OAUTH2 client secret. Configured in Google Cloud Console.
-      REDIRECT_URIS: ["toBeModified"] #URL for Google OAUTH2 to redirect to. Configured in Google Cloud Console. ex. ["http://localhost:3000/oauth2callback"]
+      REDIRECT_URIS: "toBeModified," #URL for Google OAUTH2 to redirect to. Configured in Google Cloud Console. Must add comma after each URI except the last in a list > 1. ex. "http://localhost:3000/oauth2callback,"
       FOLDER_ID: "toBeModified" #Google drive folder ID to check for changes
+      SCOPES: "toBeModified," #Scope(s) enabled for the Google Cloud project. Must add comma after each scope except the last in a list > 1. ex. "https://www.googleapis.com/auth/drive,"
       NOTION_AUTH: "tobemodified" #Notion client secret
       DATABASE_ID: "tobemodified" #Notion database ID that will host the AI notes.
       CUDA: "tobemodified" #Strictly "true" or "false" for whether whispher should use available cuda cores. ex. "false" 
+      LLM_MODEL: "tobemodified" #Exact name of LLM model to use. Must be in the /express/app/models folder. ex. "Meta-Llama-3.1-8B-Instruct.i1-Q4_K_M.gguf"
       WHISPER_MODEL: "tobemodified" #Size of the whisper model to use: tiny, small, medium, large. ex. "medium"
       PAGE_TAG: "tobemodified" #Notion Page tag to identify AI notes. ex. "AI Transcript"
     volumes:

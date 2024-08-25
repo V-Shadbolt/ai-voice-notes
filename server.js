@@ -1,4 +1,6 @@
 import express from 'express'
+import helmet from 'helmet'
+import cors from 'cors'
 import fs from 'fs'
 import { fileURLToPath } from "url";
 import path from 'path'
@@ -16,7 +18,16 @@ import { createNotionPage, populateNotionPage } from './helpers/notion.js';
 // Configuration
 dotenv.config()
 const app = express()
-const SCOPES = ['https://www.googleapis.com/auth/drive']
+app.use(helmet())
+const corsOptions = {
+    origin: process.env.CORS_ORIGIN.split(","),
+    methods: ['GET', 'HEAD', 'POST'],
+    allowedHeaders: process.env.CORS_HEADERS.split(","),
+    preflightContinue: false,
+    optionsSuccessStatus: 204
+}
+app.use(cors(corsOptions))
+const SCOPES = process.env.SCOPES.split(",")
 const SUPPORTED_MIMES = ["mp3", "m4a", "wav", "mp4", "mpeg", "mpga", "webm"]
 const PORT = 3000
 const SUPPORT_ALL_DRIVES = true
@@ -28,7 +39,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TOKEN_PATH = path.join(__dirname, "token.json")
 const START_PAGE_TOKEN_PATH = path.join(__dirname, "startpagetoken.json")
 const TEMP_PATH = path.join(__dirname,"tmp","audio.")
-const MODEL_PATH = path.join(__dirname,"models","Meta-Llama-3.1-8B-Instruct.i1-Q4_K_M.gguf")
+const MODEL_PATH = path.join(__dirname,"models",process.env.LLM_MODEL)
 
 let oAuth2Client = null
 let llama = null
@@ -99,7 +110,7 @@ async function authorize() {
         return [oAuth2Client, null]
     }
 
-    oAuth2Client = new google.auth.OAuth2(process.env.CLIENT_ID, process.env.CLIENT_SECRET, process.env.REDIRECT_URIS);
+    oAuth2Client = new google.auth.OAuth2(process.env.CLIENT_ID, process.env.CLIENT_SECRET, process.env.REDIRECT_URIS.split(","));
     const authUrl = oAuth2Client.generateAuthUrl({
         access_type: 'offline',
         scope: SCOPES,

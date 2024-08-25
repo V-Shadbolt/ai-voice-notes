@@ -10,7 +10,7 @@ import { v4 as uuid } from 'uuid'
 import { nodewhisper } from 'nodejs-whisper'
 import { getLlama, LlamaChatSession } from "node-llama-cpp";
 import { Client } from '@notionhq/client'
-import  { getAudioDurationInSeconds } from 'get-audio-duration'
+import { getAudioDurationInSeconds } from 'get-audio-duration'
 import { getPrompt } from './helpers/prompt.js';
 import { getGrammar } from './helpers/grammar.js';
 import { createNotionPage, populateNotionPage } from './helpers/notion.js';

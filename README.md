@@ -95,9 +95,10 @@ This project is compatible with Docker. You can build a Docker image using the p
 
 **Usage**
 ---------------
-1. Go to `http://localhost:3000/auth` to authenticate the app with Google's OAuth2
-2. You will be redirected to `http://localhost:3000/changes` 
-3. Refresh `http://localhost:3000/changes` after uploading audio / video files to the specified Google Drive folder
+1. Go to `http://localhost:3000/auth` to authenticate the app with Google's OAuth2 if you are not using a Service Account. 
+	+ If you are using a service account, skip to step 2.
+2. Navigate to `http://localhost:3000/changes` if not automatically redirected. 
+3. Refresh `http://localhost:3000/changes` periodically after uploading audio / video files to your specified Google Drive folder.
 
 > Note: Any files uploaded before the first run of this script will be ignored. A webhook implementation is in the works to avoid needing to manually refresh the `/changes` page.
 

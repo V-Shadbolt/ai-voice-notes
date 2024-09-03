@@ -36,11 +36,13 @@ const INCLUDE_ITEMS_FROM_ALL_DRIVES = true;
 const FOLDER_ID = process.env.FOLDER_ID
 const DATABASE_ID = process.env.DATABASE_ID
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const TOKEN_PATH = path.join(__dirname, "token.json")
-const START_PAGE_TOKEN_PATH = path.join(__dirname, "startpagetoken.json")
+const KEYFILE_PATH = path.join(__dirname,"auth", "service.json")
+const TOKEN_PATH = path.join(__dirname, "auth", "token.json")
+const START_PAGE_TOKEN_PATH = path.join(__dirname, "helpers", "startpagetoken.json")
 const TEMP_PATH = path.join(__dirname,"tmp","audio.")
 const MODEL_PATH = path.join(__dirname,"models",process.env.LLM_MODEL)
 
+let serviceClient = null
 let oAuth2Client = null
 let llama = null
 let model = null
@@ -53,12 +55,31 @@ let context = null
  * @return {Promise<void>}
  */
 async function startLlama() {
+    if (!fs.existsSync(MODEL_PATH)) {
+        throw new Error(`${MODEL_PATH} does not exist!`)
+    }
     llama = await getLlama()
     model = await llama.loadModel({
         modelPath: MODEL_PATH
     })
     grammar = await getGrammar(llama)
     context = await model.createContext()
+}
+
+/**
+ * Reads authorized service account credentials from the save file.
+ *
+ * @return {Promise<OAuth2Client|null>}
+ */
+async function loadServiceCredentialsIfExist() {
+    try {
+        return new google.auth.GoogleAuth({
+            keyFile: KEYFILE_PATH,
+            scopes: SCOPES,
+          })
+    } catch (err) {
+        return null
+    }
 }
 
 /**
@@ -100,6 +121,11 @@ async function saveCredentials(client) {
  * @return {Promise<Array>}
  */
 async function authorize() {
+    serviceClient = await loadServiceCredentialsIfExist()
+    if (serviceClient) {
+        return [serviceClient, null]
+    }
+
     oAuth2Client = await loadSavedCredentialsIfExist()
     if (oAuth2Client) {
         oAuth2Client.on('tokens', async (tokens) => {
@@ -287,7 +313,6 @@ app.get('/oauth2callback', async (req, res) => {
  * Webhook callback endpoint for any file changes in My Drive
  */
 app.get('/changes', async (req, res) => {
-    res.send('Hook recieved')
     try {
         console.log("Checking for new files.")
         const drive = await getDrive()
@@ -301,7 +326,7 @@ app.get('/changes', async (req, res) => {
             fields: "*",
             pageSize: 500,
         })
-        
+        res.send('Hook recieved')
         if (response_changes?.data?.files?.at(-1)) {
             console.log(`Found ${response_changes?.data?.files.length} new files.`)
             
@@ -372,6 +397,7 @@ app.get('/changes', async (req, res) => {
                                 contextSequence: context.getSequence()
                             })
                             const a1 = await session.prompt(prompt, {grammar, maxTokens: context.getAllocatedContextSize()})
+                            await session.dispose({disposeSequence: true})
                             
                             chatResponse = JSON.parse(a1)
                             console.log("Summarized Successfully")
@@ -425,11 +451,7 @@ app.get('/changes', async (req, res) => {
 
 })
 
-
 startLlama().then(() => {
-    /**
-     * Start server
-     */
     app.listen(PORT, (error) =>{
         if(!error)
             console.log("Server is listening on port "+ PORT)
@@ -437,4 +459,6 @@ startLlama().then(() => {
             console.log("Error occurred, server can't start", error);
         }
     )
-});
+}).catch((error) => {
+    console.log(error)
+})

@@ -130,10 +130,7 @@ dist
 .pnp.*
 
 # tokens
-service.json
-token.json
-credentials.json
-startpagetoken.json
+*.json
 
 # models
 *.gguf

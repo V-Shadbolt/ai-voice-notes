@@ -342,7 +342,8 @@ app.get('/changes', async (req, res) => {
             }
             for (const file of response_changes?.data?.files) {
                 console.log(`Working on ${file?.name}`)
-                if (SUPPORTED_MIMES.includes(file?.fileExtension) && file?.size < 200000000) {
+                //if (SUPPORTED_MIMES.includes(file?.fileExtension) && file?.size < 200000000) {
+                if (SUPPORTED_MIMES.includes(file?.fileExtension)) {
                     try {
                         // download gdrive file
                         const readableFileSize = file?.size / 1000000;

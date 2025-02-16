@@ -14,6 +14,7 @@ import { getAudioDurationInSeconds } from 'get-audio-duration'
 import { getPrompt } from './helpers/prompt.js';
 import { getGrammar } from './helpers/grammar.js';
 import { createNotionPage, populateNotionPage } from './helpers/notion.js';
+import axios from 'axios';
 
 // Configuration
 dotenv.config()
@@ -247,6 +248,28 @@ async function deleteFile(file) {
    })
 }
 
+/**
+ * Register webhook with Google Drive
+ *
+ * @param {drive_v3.Drive} drive
+ * @return {Promise<void>}
+ */
+async function registerWebhook(drive) {
+    try {
+        const pageToken = await startPageToken(drive)
+        const startToken = pageToken[0]
+        const channelId = uuid()
+        
+        const response_watch = await axios.post(`${process.env.RELAY_URL}/register`, {
+            pageToken: startToken,
+            channelId: channelId
+        })
+        console.log('Webhook registered successfully')
+    } catch (error) {
+        console.error('Failed to register webhook:', error)
+    }
+}
+
 
 /**
  * Authorization endpoint to instantiate OAuth2
@@ -273,30 +296,6 @@ app.get('/oauth2callback', async (req, res) => {
             await saveCredentials(oAuth2Client)
         }
         console.log('Authentication successful!')
-
-        // TO_DO Register Webhook to watch for changes
-        /*
-        const drive = await getDrive()
-        const pageToken = await startPageToken(drive)
-        const lastCheck = pageToken[1]
-        const startToken = pageToken[0]
-        const channelId = uuid.v4();
-
-        const requestBody = {
-            kind: "api#channel",
-            type: "webhook",
-            address: 'http://localhost:3000/changes',
-            id: channelId,
-          };
-        const response_watch = await drive.files.watch({
-            q: `"${FOLDER_ID}" in parents and mimeType != "application/vnd.google-apps.folder" and trashed = false`,
-            pageToken: startToken,
-            supportsAllDrives: SUPPORT_ALL_DRIVES,
-            supportsTeamDrives: SUPPORT_TEAM_DRIVES,
-            includeItemsFromAllDrives: INCLUDE_ITEMS_FROM_ALL_DRIVES,
-            requestBody: requestBody,
-        })
-        */
 
         // Placeholder for webhook callback endpoint
         setTimeout(function() {
@@ -452,7 +451,34 @@ app.get('/changes', async (req, res) => {
 
 })
 
-startLlama().then(() => {
+app.post('/webhook', async (req, res) => {
+    try {
+        const resourceState = req.headers['x-goog-resource-state']
+        
+        if (resourceState === 'sync') {
+            res.status(200).send('Sync notification received')
+            return
+        }
+        
+        if (resourceState === 'change') {
+            // Redirect to /changes endpoint to process updates
+            res.status(200).send('OK')
+            await axios.get(`${process.env.INTERNAL_SERVER}/changes`)
+        }
+    } catch (error) {
+        console.error('Webhook processing error:', error)
+        //res.status(500).send('Failed to process webhook')
+    }
+})
+
+startLlama().then(async() => {
+    serviceClient = await loadServiceCredentialsIfExist()
+
+    if (serviceClient) {
+        const drive = await getDrive()
+        await registerWebhook(drive)
+    }
+
     app.listen(PORT, (error) =>{
         if(!error)
             console.log("Server is listening on port "+ PORT)
